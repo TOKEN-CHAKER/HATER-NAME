@@ -2,61 +2,88 @@ import requests
 import time
 import os
 
-# ------------------ CONFIGURATION ------------------
+# ------------------ CONFIG ------------------
 
-ACCESS_TOKEN = 'EAABXXXXXXXXXXXX'     # <-- Your Facebook EAAB token
-CONVO_ID = 't_1234567890123456'       # <-- Conversation ID (with 't_' prefix)
-HATER_UID = '1000XXXXXXXXXXX'         # <-- UID of the person to mention
-DELAY_SECONDS = 3                     # <-- Delay between messages
+CONVO_ID = 't_1234567890123456'      # <-- Conversation ID
+HATER_UID = '1000XXXXXXXXXXX'        # <-- Hater UID
+DELAY_SECONDS = 3                    # <-- Delay between each message
 
-MESSAGES_FILE = 'messages.txt'        # <-- File containing messages (one per line)
+TOKENS_FILE = 'tokens.txt'           # <-- File with one token per line
+MESSAGES_FILE = 'messages.txt'       # <-- File with one message per line
 
-# ------------------ MESSAGE SENDING FUNCTION ------------------
+# ------------------ FUNCTIONS ------------------
 
-def load_messages(file_path):
+def load_file_lines(file_path):
     if not os.path.exists(file_path):
-        print(f"[ERROR] Message file not found: {file_path}")
+        print(f"[ERROR] File not found: {file_path}")
         return []
     with open(file_path, 'r', encoding='utf-8') as file:
-        lines = [line.strip() for line in file if line.strip()]
-    return lines
+        return [line.strip() for line in file if line.strip()]
 
-def send_mention_message(hater_uid, convo_id, messages, token, delay):
+def send_message(token, convo_id, hater_uid, message):
     url = f'https://graph.facebook.com/v20.0/{convo_id}/messages'
-    
-    for idx, msg in enumerate(messages, 1):
-        full_message = f"{msg} @{hater_uid}"
-        data = {
-            'recipient': f'{{"thread_key":"{convo_id}"}}',
-            'message': full_message,
-            'tagged_message_metadata': f'[{{"id":"{hater_uid}","offset":{len(msg)+1},"length":{len(hater_uid)+1}}}]',
-            'access_token': token
-        }
-
-        response = requests.post(url, data=data)
-        if response.status_code == 200:
-            print(f"[{idx}] Sent: '{msg}' with mention")
+    data = {
+        'recipient': f'{{"thread_key":"{convo_id}"}}',
+        'message': f"{message} @{hater_uid}",
+        'tagged_message_metadata': f'[{{"id":"{hater_uid}","offset":{len(message)+1},"length":{len(hater_uid)+1}}}]',
+        'access_token': token
+    }
+    try:
+        res = requests.post(url, data=data)
+        if res.status_code == 200:
+            return True
         else:
-            print(f"[{idx}] Failed: {response.text}")
-        time.sleep(delay)
+            print(f"  [Token Error] {res.json().get('error', {}).get('message', 'Unknown')}")
+            return False
+    except Exception as e:
+        print(f"  [Request Failed] {str(e)}")
+        return False
+
+def start_spamming(tokens, messages, convo_id, hater_uid, delay):
+    msg_index = 0
+    token_index = 0
+
+    while msg_index < len(messages):
+        token = tokens[token_index]
+        message = messages[msg_index]
+
+        print(f"[{msg_index+1}] Trying token {token_index+1}/{len(tokens)}... ", end='')
+
+        success = send_message(token, convo_id, hater_uid, message)
+
+        if success:
+            print("Sent successfully!")
+            msg_index += 1
+            time.sleep(delay)
+        else:
+            token_index += 1
+            if token_index >= len(tokens):
+                print("[!] All tokens failed. Exiting.")
+                break
 
 def clear():
     os.system('cls' if os.name == 'nt' else 'clear')
 
-# ------------------ MAIN PROGRAM ------------------
+# ------------------ MAIN ------------------
 
 if __name__ == '__main__':
     clear()
-    print("========================================")
-    print("  Facebook Mention Spammer with File")
-    print("           by Broken Nadeem")
-    print("========================================\n")
+    print("==============================================")
+    print(" Multi-Token Facebook Mention Spammer Tool")
+    print("               by Broken Nadeem")
+    print("==============================================\n")
 
-    messages = load_messages(MESSAGES_FILE)
+    tokens = load_file_lines(TOKENS_FILE)
+    messages = load_file_lines(MESSAGES_FILE)
+
+    if not tokens:
+        print("[!] No tokens found in tokens.txt")
+        exit()
     if not messages:
-        print("[!] No messages loaded. Exiting.")
+        print("[!] No messages found in messages.txt")
         exit()
 
+    print(f"Total Tokens Loaded   : {len(tokens)}")
     print(f"Total Messages Loaded : {len(messages)}")
     print(f"Target UID            : {HATER_UID}")
     print(f"Conversation ID       : {CONVO_ID}")
@@ -64,6 +91,6 @@ if __name__ == '__main__':
 
     proceed = input("Start Spamming? (y/n): ").lower()
     if proceed == 'y':
-        send_mention_message(HATER_UID, CONVO_ID, messages, ACCESS_TOKEN, DELAY_SECONDS)
+        start_spamming(tokens, messages, CONVO_ID, HATER_UID, DELAY_SECONDS)
     else:
         print("Aborted.")
